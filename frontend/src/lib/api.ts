@@ -75,11 +75,16 @@ export async function generateSermonApi(params: KhutbahGenerationParams): Promis
               title: `خطبة الجمعة: ${params.theme}`,
               theme: params.theme,
               sermon_type: params.sermon_type,
+              audience_profile: params.audience_profile || 'عامة المصلين ورواد المسجد',
+              tone: params.tone || 'حكيم ومؤثر',
               theological_creed: "Ahl al-Sunnah wal-Jama'ah",
               verification_status: 'fully_verified',
               word_count: allWords,
               estimated_delivery_minutes: Math.round((allWords / 95.0) * 10) / 10,
-              blocks: mappedBlocks
+              target_duration_minutes: params.target_duration_minutes || 15,
+              blocks: mappedBlocks,
+              audits: [],
+              created_at: new Date().toISOString()
             };
           }
         }
