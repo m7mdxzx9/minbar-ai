@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Minbar Mobile (منبر الذكاء الاصطناعي)",
+    "slug": "minbar-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0f17"
+    },
+    "assetBundlePatterns": [
+      "**/*",
+      "assets/database/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.minbar.mobile",
+      "infoPlist": {
+        "UIRequiresFullScreen": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b0f17"
+      },
+      "package": "ai.minbar.mobile",
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.INTERNET"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-sqlite",
+        {
+          "enableFTS": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "minbar-mobile-offline"
+      }
+    }
+  }
+}
