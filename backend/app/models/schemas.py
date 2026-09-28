@@ -137,6 +137,11 @@ class KhutbahGenerationRequest(BaseModel):
     quran_count: int = Field(default=2, ge=1, le=5)
     hadith_count: int = Field(default=2, ge=1, le=5)
     poetry_count: int = Field(default=1, ge=0, le=3)
+    model_provider: Optional[str] = Field(default="builtin", description="'builtin', 'gemini', 'ollama'")
+    api_key: Optional[str] = None
+    custom_model_name: Optional[str] = None
+    selected_citation_ids: Optional[List[str]] = None
+    custom_instructions: Optional[str] = None
 
 
 class TransformBlockRequest(BaseModel):
@@ -144,8 +149,10 @@ class TransformBlockRequest(BaseModel):
     
     sermon_id: str
     block_id: str
-    action: str = Field(..., description="Action: 'make_solemn', 'replace_hadith', 'elaborate', 'shorten'")
+    action: str = Field(..., description="Action: 'rephrase', 'elaborate', 'shorten', 'make_solemn', 'replace_hadith'")
     custom_instruction: Optional[str] = None
+    model_provider: Optional[str] = "builtin"
+    api_key: Optional[str] = None
 
 
 class KhutbahResponse(BaseModel):

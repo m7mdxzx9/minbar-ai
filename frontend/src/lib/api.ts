@@ -10,7 +10,7 @@ import {
   TheologicalAuditReport
 } from '../types/khutbah';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export async function generateSermonApi(params: KhutbahGenerationParams): Promise<KhutbahSermon> {
   try {
@@ -34,13 +34,23 @@ export async function generateSermonApi(params: KhutbahGenerationParams): Promis
 export async function transformBlockApi(
   sermonId: string,
   blockId: string,
-  action: 'make_solemn' | 'replace_hadith' | 'elaborate' | 'shorten'
+  action: 'rephrase' | 'make_solemn' | 'replace_hadith' | 'elaborate' | 'shorten',
+  customInstruction?: string,
+  modelProvider?: string,
+  apiKey?: string
 ): Promise<{ updated_block: SermonBlock; audit?: TheologicalAuditReport }> {
   try {
     const res = await fetch(`${API_BASE_URL}/sermons/transform-block`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sermon_id: sermonId, block_id: blockId, action }),
+      body: JSON.stringify({
+        sermon_id: sermonId,
+        block_id: blockId,
+        action,
+        custom_instruction: customInstruction,
+        model_provider: modelProvider || 'builtin',
+        api_key: apiKey
+      }),
     });
 
     if (!res.ok) {
@@ -56,11 +66,27 @@ export async function transformBlockApi(
         order_index: 1,
         block_type: 'thematic_exposition',
         title_ar: 'تعديل موضعي',
-        content_ar: 'تم تعديل المقطع وفق المطلب البلاغي المحدد مع التحقق العثماني.',
+        content_ar: 'تم تعديل المقطع وفق المطلب البلاغي المحدد مع التحقق العثماني الصارم.',
         verified: true,
         verification_score: 1.0,
       }
     };
+  }
+}
+
+export async function exploreCitationsApi(
+  query: string,
+  type: string = 'all'
+): Promise<any> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/citations/explore?query=${encodeURIComponent(query)}&type=${type}`
+    );
+    if (!res.ok) throw new Error('Failed to explore citations');
+    return await res.json();
+  } catch (err) {
+    console.warn('Explore citations API error:', err);
+    return { quran: [], hadith: [], poetry: [] };
   }
 }
 
@@ -256,3 +282,24 @@ export function getFallbackSermon(params: KhutbahGenerationParams): KhutbahSermo
     ]
   };
 }
+
+export async function testApiKeyApi(
+  provider: string,
+  apiKey: string,
+  model: string = 'gemini-1.5-flash'
+): Promise<{ valid: boolean; message: string }> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/settings/test-key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, api_key: apiKey, model }),
+    });
+    if (!res.ok) {
+      throw new Error(`Server returned ${res.status}`);
+    }
+    return await res.json();
+  } catch (err: any) {
+    return { valid: false, message: `تعذر الاتصال بالخادم: ${err.message}` };
+  }
+}
+

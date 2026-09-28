@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Clock,
@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Plus,
-  BookOpen
+  BookOpen,
+  Key
 } from 'lucide-react';
 import { KhutbahSermon, SermonBlock, BlockType } from '../types/khutbah';
 import { CitationCard } from './CitationCard';
@@ -24,17 +25,32 @@ interface KhutbahEditorProps {
   onUpdateSermon: (updatedSermon: KhutbahSermon) => void;
   onOpenAuditModal: () => void;
   onOpenTeleprompter: () => void;
+  onOpenApiKeyModal: () => void;
 }
 
 export const KhutbahEditor: React.FC<KhutbahEditorProps> = ({
   sermon,
   onUpdateSermon,
   onOpenAuditModal,
-  onOpenTeleprompter
+  onOpenTeleprompter,
+  onOpenApiKeyModal
 }) => {
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [loadingBlockId, setLoadingBlockId] = useState<string | null>(null);
   const [paperMode, setPaperMode] = useState<'dark' | 'cream'>('dark');
+  const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkKey = () => {
+      if (typeof window !== 'undefined') {
+        const k = localStorage.getItem('minbar_api_key');
+        setHasApiKey(Boolean(k && k.trim()));
+      }
+    };
+    checkKey();
+    window.addEventListener('storage', checkKey);
+    return () => window.removeEventListener('storage', checkKey);
+  }, []);
 
   // Recalculate word count and delivery duration
   const updateContent = (blockId: string, newContent: string) => {
@@ -62,11 +78,13 @@ export const KhutbahEditor: React.FC<KhutbahEditorProps> = ({
   // Inline AI transformation handler
   const handleTransform = async (
     blockId: string,
-    action: 'make_solemn' | 'replace_hadith' | 'elaborate' | 'shorten'
+    action: 'rephrase' | 'make_solemn' | 'replace_hadith' | 'elaborate' | 'shorten'
   ) => {
     setLoadingBlockId(blockId);
     try {
-      const res = await transformBlockApi(sermon.id, blockId, action);
+      const savedKey = typeof window !== 'undefined' ? localStorage.getItem('minbar_api_key') || undefined : undefined;
+      const savedProvider = typeof window !== 'undefined' ? localStorage.getItem('minbar_model_provider') || 'builtin' : 'builtin';
+      const res = await transformBlockApi(sermon.id, blockId, action, undefined, savedProvider, savedKey);
       if (res && res.updated_block) {
         const updatedBlocks = sermon.blocks.map(b =>
           b.id === blockId ? { ...b, ...res.updated_block } : b
@@ -192,6 +210,27 @@ export const KhutbahEditor: React.FC<KhutbahEditorProps> = ({
             >
               <ShieldCheck className="h-4 w-4 text-emerald-400" />
               <span>موثق بنسبة 100%</span>
+            </button>
+
+            {/* AI API Key Trigger Button */}
+            <button
+              onClick={onOpenApiKeyModal}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-600/50 bg-amber-950/30 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-900/40 hover:ring-1 hover:ring-amber-400"
+              title="إعداد مفتاح الذكاء الاصطناعي (API Key)"
+            >
+              <Key className="h-3.5 w-3.5 text-amber-400" />
+              <span>مفتاح الذكاء الاصطناعي</span>
+              {hasApiKey ? (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  مُفعّل
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                  <span className="h-2 w-2 rounded-full bg-slate-500" />
+                  مدمج
+                </span>
+              )}
             </button>
 
             {/* Paper Theme Toggle */}

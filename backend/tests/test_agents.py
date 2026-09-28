@@ -95,3 +95,38 @@ def test_full_langgraph_pipeline_execution():
     for cb in citation_blocks:
         assert cb["verified"] is True
         assert cb["verification_score"] >= 0.98
+
+
+def test_sermon_customization_counts_and_selection():
+    """Verify that user customization of citation counts and specific selection works dynamically."""
+    req = {
+        "theme": "بر الوالدين وحقهما في الإسلام",
+        "sermon_type": "jumuah",
+        "target_duration_minutes": 15,
+        "quran_count": 3,
+        "hadith_count": 2,
+        "poetry_count": 0,
+        "selected_citation_ids": ["q_17_23", "h_1"]
+    }
+
+    final_sermon = execute_sermon_pipeline(req)
+    assert final_sermon is not None
+
+    blocks = final_sermon["blocks"]
+    quran_blocks = [b for b in blocks if b.get("citation_source_type") == "quran"]
+    hadith_blocks = [b for b in blocks if b.get("citation_source_type") == "hadith"]
+    poetry_blocks = [b for b in blocks if b.get("citation_source_type") == "poetry"]
+
+    # Verify exact counts
+    assert len(quran_blocks) == 3, f"Expected 3 quran blocks, got {len(quran_blocks)}"
+    assert len(hadith_blocks) == 2, f"Expected 2 hadith blocks, got {len(hadith_blocks)}"
+    assert len(poetry_blocks) == 0, f"Expected 0 poetry blocks, got {len(poetry_blocks)}"
+
+    # Verify that the selected citations are present
+    assert any("الإسراء" in b.get("title_ar", "") or "23" in b.get("title_ar", "") for b in quran_blocks)
+    assert any("1" in str(b.get("title_ar", "")) or "بدء الوحي" in str(b.get("content_ar", "")) or "الأعمال بالنيات" in str(b.get("content_ar", "")) for b in hadith_blocks)
+
+    # Verify sequential ordering
+    order_indices = [b["order_index"] for b in blocks]
+    assert order_indices == list(range(1, len(blocks) + 1))
+

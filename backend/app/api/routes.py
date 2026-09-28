@@ -21,6 +21,7 @@ from app.engine.verifier import (
     TheologicalPostGenerationValidator,
     calculate_canonical_hash
 )
+from app.engine.llm_adapter import LLMAdapter
 
 router = APIRouter(prefix="/api", tags=["Sermons & Citations"])
 
@@ -85,19 +86,7 @@ def transform_block(req: TransformBlockRequest):
     old_content = target_block["content_ar"]
     audit_report = None
 
-    if req.action == "make_solemn":
-        # Amplify solemn exhortation and remembrance of the Hereafter
-        if target_block["block_type"] == "thematic_exposition":
-            target_block["content_ar"] = (
-                old_content + "\n\n"
-                "فَيَا عِبَادَ اللَّهِ: الْحَذَرَ الْحَذَرَ مِنْ رُكُونِ الْغَفْلَةِ وَطُولِ الأَمَلِ! "
-                "فَإِنَّ الدُّنْيَا دَارُ مَمَرٍّ لَا دَارُ مَقَرٍّ، وَإِنَّ القَبْرَ أَوَّلُ مَنَازِلِ الآخِرَةِ، "
-                "فَأَعِدُّوا لِلْمَسْأَلَةِ جَوَابًا، وَلِلْجَوَابِ صَوَابًا، وَتَزَوَّدُوا بِالتَّقْوَى فَإِنَّهَا نِعْمَ الزَّادُ لِيَوْمِ الْمَعَادِ."
-            )
-        else:
-            target_block["content_ar"] = "عِبَادَ اللَّهِ، تَذَكَّرُوا وُقُوفَكُمْ بَيْنَ يَدَيْ رَبِّكُمْ: " + old_content
-
-    elif req.action == "replace_hadith":
+    if req.action == "replace_hadith":
         # Fetch an alternative authentic hadith on the theme
         alt_hadiths = shared_retriever.search_hadith(sermon.get("theme", ""), limit=3)
         # Choose a hadith different from current canonical id
@@ -131,19 +120,16 @@ def transform_block(req: TransformBlockRequest):
             "takhrij": selected.get("takhrij_notes"),
             "hash": selected.get("canonical_hash")
         }
-
-    elif req.action == "elaborate":
-        target_block["content_ar"] = (
-            old_content + "\n\n"
-            "وَبَيَانُ ذَلِكَ أَنَّ الشَّرِيعَةَ الإِسْلَامِيَّةَ جَاءَتْ بِتَحْصِيلِ الْمَصَالِحِ وَتَكْمِيلِهَا، "
-            "وَتَعْطِيلِ الْمَفَاسِدِ وَتَقْلِيلِهَا. وَكُلَّمَا ازْدَادَ الْمَرْءُ بَصِيرَةً فِي دِينِهِ، "
-            "أَدْرَكَ حِكْمَةَ التَّكْلِيفِ وَأَثَرَ الطَّاعَةِ فِي صَلَاحِ الْفَرْدِ وَعِمَارَةِ الْمُجْتَمَعِ."
+    else:
+        # AI-Assisted refinement (rephrase, elaborate, shorten, make_solemn)
+        target_block["content_ar"] = LLMAdapter.refine_block_content(
+            current_text=old_content,
+            action=req.action,
+            block_type=target_block.get("block_type", "thematic_exposition"),
+            custom_instruction=req.custom_instruction,
+            model_provider=req.model_provider or "builtin",
+            api_key=req.api_key
         )
-
-    elif req.action == "shorten":
-        lines = [line.strip() for line in old_content.split("\n") if line.strip()]
-        if len(lines) > 2:
-            target_block["content_ar"] = "\n\n".join(lines[:2])
 
     # Re-save updated sermon
     blocks[target_idx] = target_block
@@ -162,6 +148,23 @@ def transform_block(req: TransformBlockRequest):
         "total_word_count": sermon["word_count"],
         "estimated_delivery_minutes": sermon["estimated_delivery_minutes"]
     }
+
+
+@router.get("/citations/explore")
+def explore_citations(query: str = Query(..., min_length=1), type: str = Query("all")):
+    """
+    Interactive Citations Explorer & Tester.
+    Fetches verified Quranic verses, Sahih Hadiths with Takhrij, and Classical Poetry
+    strictly matching the sermon topic or search keyword.
+    """
+    results = {}
+    if type in ["all", "quran"]:
+        results["quran"] = shared_retriever.search_quran(query, limit=5)
+    if type in ["all", "hadith"]:
+        results["hadith"] = shared_retriever.search_hadith(query, limit=5)
+    if type in ["all", "poetry"]:
+        results["poetry"] = shared_retriever.search_poetry(query, limit=3)
+    return results
 
 
 @router.post("/citations/search")
@@ -207,3 +210,46 @@ def verify_quote(citation_type: str = Query(..., pattern="^(quran|hadith|poetry)
         "canonical_text": canonical_text,
         "threshold_met": report.composite_score >= 0.98
     }
+
+
+@router.post("/settings/test-key")
+def test_api_key(req: Dict[str, Any]):
+    """Tests validity of an external AI API key (Google Gemini or Ollama)."""
+    provider = req.get("provider", "gemini")
+    api_key = req.get("api_key", "").strip()
+    model = req.get("model", "gemini-1.5-flash")
+
+    if not api_key and provider == "gemini":
+        return {"valid": False, "message": "يرجى إدخال مفتاح API أولاً"}
+
+    import httpx
+    if provider == "gemini":
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": "اختبار الاتصال: أجب بكلمة نعم"}]}],
+            "generationConfig": {"maxOutputTokens": 10}
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(url, json=payload)
+                if res.status_code == 200:
+                    return {"valid": True, "message": "تم التحقق من المفتاح بنجاح! الاتصال بـ Google Gemini يعمل بكفاءة."}
+                else:
+                    err = res.json().get("error", {}).get("message", res.text)
+                    return {"valid": False, "message": f"فشل التحقق ({res.status_code}): {err}"}
+        except Exception as e:
+            return {"valid": False, "message": f"تعذر الاتصال بخدمة Gemini: {str(e)}"}
+    elif provider == "ollama":
+        ollama_url = req.get("ollama_url", "http://localhost:11434/api/tags")
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                res = client.get(ollama_url)
+                if res.status_code == 200:
+                    return {"valid": True, "message": "تم الاتصال بنجاح بخادم Ollama المحلي!"}
+                else:
+                    return {"valid": False, "message": f"خادم Ollama أعاد رمز ({res.status_code})"}
+        except Exception as e:
+            return {"valid": False, "message": f"تعذر الاتصال بخادم Ollama: {str(e)}"}
+
+    return {"valid": False, "message": "مزود غير معروف"}
+

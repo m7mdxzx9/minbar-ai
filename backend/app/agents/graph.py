@@ -52,9 +52,51 @@ def retriever_node(state: KhutbahGraphState) -> Dict[str, Any]:
 
 def synthesizer_node(state: KhutbahGraphState) -> Dict[str, Any]:
     """Agent 3 Node: Synthesizes classical Arabic eloquence with embedded markers."""
+    req = state.get("request", {})
     blueprint = state["blueprint"]
     citations = state["citations"]
-    blocks = RhetoricalSynthesizer.synthesize_sermon(blueprint, citations)
+
+    provider = req.get("model_provider", "builtin")
+    api_key = req.get("api_key")
+    custom_model = req.get("custom_model_name")
+    
+    remote_res = None
+    if provider in ["gemini", "ollama"]:
+        try:
+            from app.engine.llm_adapter import LLMAdapter
+            remote_res = LLMAdapter.generate_sermon_content(
+                theme=req.get("theme", ""),
+                sermon_type=req.get("sermon_type", "jumuah"),
+                duration=req.get("target_duration_minutes", 15),
+                audience=req.get("audience_profile", "عامة المسلمين"),
+                tone=req.get("tone", "موعظة ترقق القلوب"),
+                verified_citations=citations,
+                model_provider=provider,
+                api_key=api_key,
+                custom_model=custom_model
+            )
+        except Exception as e:
+            print(f"[graph.py] LLMAdapter error: {e}. Falling back to RhetoricalSynthesizer.")
+
+    if remote_res and "blocks" in remote_res and len(remote_res["blocks"]) > 0:
+        raw_blocks = remote_res["blocks"]
+        sermon_id = str(uuid.uuid4())
+        blocks = []
+        for i, b in enumerate(raw_blocks):
+            blocks.append({
+                "id": str(uuid.uuid4()),
+                "sermon_id": sermon_id,
+                "order_index": i + 1,
+                "block_type": b.get("block_type", "thematic_exposition"),
+                "title_ar": b.get("title_ar", f"مقطع {i+1}"),
+                "content_ar": b.get("content_ar", ""),
+                "verified": False,
+                "verification_score": 0.0,
+                "citation_source_type": None
+            })
+    else:
+        blocks = RhetoricalSynthesizer.synthesize_sermon(blueprint, citations)
+
     return {"blocks": blocks}
 
 

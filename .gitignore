@@ -10,3 +10,12 @@ out/
 build/
 dist/
 .DS_Store
+screenshot*.png
+.gradle/
+*.log
+local.properties
+minbar-android/.gradle/
+minbar-android/.kotlin/
+minbar-android/build/
+minbar-android/**/build/
+minbar-android/local.properties

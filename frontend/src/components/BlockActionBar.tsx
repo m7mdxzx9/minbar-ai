@@ -6,7 +6,7 @@ import { BlockType } from '../types/khutbah';
 
 interface BlockActionBarProps {
   blockType: BlockType;
-  onTransform: (action: 'make_solemn' | 'replace_hadith' | 'elaborate' | 'shorten') => void;
+  onTransform: (action: 'rephrase' | 'make_solemn' | 'replace_hadith' | 'elaborate' | 'shorten') => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onDelete?: () => void;
@@ -29,10 +29,21 @@ export const BlockActionBar: React.FC<BlockActionBarProps> = ({
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700/60 bg-slate-900/90 px-3 py-2 text-xs shadow-md backdrop-blur-md transition-all">
       <div className="flex items-center gap-1.5 text-amber-400">
         <Sparkles className="h-3.5 w-3.5" />
-        <span className="font-medium text-slate-300">أدوات الصياغة والتحسين الشرعي:</span>
+        <span className="font-medium text-slate-300">أدوات الذكاء الاصطناعي والصياغة:</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
+        {/* Action 0: Rephrase with eloquence */}
+        <button
+          onClick={() => onTransform('rephrase')}
+          disabled={isLoading}
+          className="flex items-center gap-1 rounded bg-slate-800 px-2.5 py-1 text-slate-200 transition hover:bg-purple-600/20 hover:text-purple-300 disabled:opacity-50"
+          title="إعادة صياغة بأفصح عبارة وأرقى بيان عربي رصين"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+          <span>إعادة صياغة بليغة</span>
+        </button>
+
         {/* Action 1: Make Solemn */}
         <button
           onClick={() => onTransform('make_solemn')}

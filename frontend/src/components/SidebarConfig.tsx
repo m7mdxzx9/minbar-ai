@@ -11,13 +11,24 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
-  Flame
+  Flame,
+  Search,
+  Cpu,
+  Key,
+  CheckCircle2,
+  Scroll
 } from 'lucide-react';
 import { KhutbahGenerationParams, SermonType } from '../types/khutbah';
 
 interface SidebarConfigProps {
   onGenerate: (params: KhutbahGenerationParams) => void;
   isLoading: boolean;
+  onOpenCitationsExplorer: (theme: string) => void;
+  quranCount: number;
+  hadithCount: number;
+  poetryCount: number;
+  selectedCitationIds: string[];
+  onUpdateCounts: (quran: number, hadith: number, poetry: number) => void;
 }
 
 const QUICK_THEMES = [
@@ -25,23 +36,48 @@ const QUICK_THEMES = [
   'الأخوة في الله وحفظ حقوق المسلمين',
   'بر الوالدين وصلة الأرحام وفضلهما',
   'إخلاص النية وصلاح السريرة ومراقبة الله',
-  'التوبة الصادقة والرجوع إلى الله',
-  'خطورة آفات اللسان ومظالم العباد'
+  'حفظ الأمانة والوفاء بالعهود في المعاملات',
+  'التوبة الصادقة والرجوع إلى الله'
 ];
 
-export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoading }) => {
+export const SidebarConfig: React.FC<SidebarConfigProps> = ({
+  onGenerate,
+  isLoading,
+  onOpenCitationsExplorer,
+  quranCount,
+  hadithCount,
+  poetryCount,
+  selectedCitationIds,
+  onUpdateCounts
+}) => {
   const [isOpen, setIsOpen] = useState(true);
   const [theme, setTheme] = useState('الصبر عند الشدائد وحسن التوكل على الله');
   const [sermonType, setSermonType] = useState<SermonType>('jumuah');
   const [duration, setDuration] = useState(15);
   const [audience, setAudience] = useState('جمهور عام متنوع من المصلين والأسر');
   const [tone, setTone] = useState('موعظة ترقق القلوب وتجمع بين الرجاء والرهبة');
-  const [quranCount, setQuranCount] = useState(2);
-  const [hadithCount, setHadithCount] = useState(2);
-  const [poetryCount, setPoetryCount] = useState(1);
+  
+  // Model settings
+  const [modelProvider, setModelProvider] = useState<'builtin' | 'gemini' | 'ollama'>('builtin');
+  const [apiKey, setApiKey] = useState('');
+  const [showModelConfig, setShowModelConfig] = useState(false);
+
+  // Sync with localStorage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedKey = localStorage.getItem('minbar_api_key');
+      const savedProv = localStorage.getItem('minbar_model_provider') as any;
+      if (savedKey) setApiKey(savedKey);
+      if (savedProv) setModelProvider(savedProv);
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (typeof window !== 'undefined') {
+      if (apiKey) localStorage.setItem('minbar_api_key', apiKey.trim());
+      localStorage.setItem('minbar_model_provider', modelProvider);
+    }
     onGenerate({
       theme,
       sermon_type: sermonType,
@@ -50,7 +86,10 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
       tone,
       quran_count: quranCount,
       hadith_count: hadithCount,
-      poetry_count: poetryCount
+      poetry_count: poetryCount,
+      model_provider: modelProvider,
+      api_key: apiKey ? apiKey.trim() : undefined,
+      selected_citation_ids: selectedCitationIds.length > 0 ? selectedCitationIds : undefined
     });
   };
 
@@ -60,7 +99,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full border border-amber-600/40 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-amber-300 shadow-xl backdrop-blur-md transition hover:bg-slate-800 hover:text-amber-200"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full border border-amber-600/40 bg-slate-900 px-5 py-3 text-xs font-bold text-amber-300 shadow-2xl backdrop-blur-md transition hover:bg-slate-800 hover:text-amber-200"
         >
           <Sliders className="h-4 w-4" />
           <span>تخصيص الخطبة والمحددات</span>
@@ -76,7 +115,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <div className="flex items-center gap-2 text-amber-400">
+          <div className="flex items-center gap-2.5 text-amber-400">
             <Sliders className="h-4 w-4" />
             <h3 className="font-amiri text-lg font-bold text-amber-200">محددات صياغة الخطبة</h3>
           </div>
@@ -89,17 +128,17 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-xs text-slate-300">
+        <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto px-5 py-4 text-xs text-slate-300">
           {/* 1. Theme Input */}
           <div>
-            <label className="mb-1.5 block font-semibold text-slate-200">موضوع الخطبة:</label>
+            <label className="mb-1.5 block font-semibold text-slate-200">موضوع أو عنوان الخطبة:</label>
             <textarea
               value={theme}
               onChange={e => setTheme(e.target.value)}
               rows={2}
               required
               className="w-full rounded-xl border border-slate-700/80 bg-slate-900/90 p-3 font-amiri text-sm leading-relaxed text-amber-100 outline-none transition focus:border-amber-500/80"
-              placeholder="اكتب عنوان أو فكرة الخطبة..."
+              placeholder="اكتب موضوع الخطبة أو الفكرة المراد تناولها..."
             />
 
             {/* Quick Themes */}
@@ -109,7 +148,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
                   type="button"
                   key={idx}
                   onClick={() => setTheme(t)}
-                  className="rounded bg-slate-800/80 px-2 py-1 text-[11px] text-slate-300 transition hover:bg-amber-600/20 hover:text-amber-300"
+                  className="rounded-lg bg-slate-800/80 px-2 py-1 text-[11px] text-slate-300 transition hover:bg-amber-600/20 hover:text-amber-300"
                 >
                   {t.substring(0, 22)}...
                 </button>
@@ -119,7 +158,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
 
           {/* 2. Sermon Type */}
           <div>
-            <label className="mb-1.5 block font-semibold text-slate-200">نوع الخطبة أو الموعظة:</label>
+            <label className="mb-1.5 block font-semibold text-slate-200">نوع الخطبة:</label>
             <select
               value={sermonType}
               onChange={e => setSermonType(e.target.value as SermonType)}
@@ -128,12 +167,133 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
               <option value="jumuah">خطبة جمعة مسنونة (بخطبتين وجلسة استغفار)</option>
               <option value="eid_al_fitr">خطبة عيد الفطر المبارك</option>
               <option value="eid_al_adha">خطبة عيد الأضحى المبارك</option>
-              <option value="janazah">موعظة جنائزية وتذكير بالموت</option>
+              <option value="janazah">موعظة جنائزية وتذكير بالآخرة</option>
+              <option value="istisqa">خطبة صلاة الاستسقاء والتوبة</option>
               <option value="general_reminder">موعظة وتذكير عام في المسجد</option>
             </select>
           </div>
 
-          {/* 3. Duration & Word Count Calculator */}
+          {/* 3. Citations Explorer Button & Steppers */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-200">تخصيص الشواهد الشرعية:</span>
+              <button
+                type="button"
+                onClick={() => onOpenCitationsExplorer(theme)}
+                className="flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-300 transition hover:bg-amber-500/20"
+              >
+                <Search className="h-3 w-3" />
+                <span>مختبر واستعراض الشواهد</span>
+              </button>
+            </div>
+
+            {selectedCitationIds.length > 0 && (
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/30 p-2 rounded-lg border border-emerald-900/50">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>تم قفل ({selectedCitationIds.length}) شواهد معتمدة مسبقاً من المختبر.</span>
+              </div>
+            )}
+
+            {/* Steppers */}
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">القرآن الكريم (رسم عثماني):</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounts(Math.max(1, quranCount - 1), hadithCount, poetryCount)}
+                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >-</button>
+                <span className="w-5 text-center font-bold text-amber-300">{quranCount}</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounts(Math.min(5, quranCount + 1), hadithCount, poetryCount)}
+                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >+</button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">الحديث النبوي (الصحاح والسنن):</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounts(quranCount, Math.max(1, hadithCount - 1), poetryCount)}
+                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >-</button>
+                <span className="w-5 text-center font-bold text-emerald-300">{hadithCount}</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounts(quranCount, Math.min(5, hadithCount + 1), poetryCount)}
+                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >+</button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">الشعر العربي والحكم البلاغية:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounts(quranCount, hadithCount, Math.max(0, poetryCount - 1))}
+                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >-</button>
+                <span className="w-5 text-center font-bold text-sky-300">{poetryCount}</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounts(quranCount, hadithCount, Math.min(3, poetryCount + 1))}
+                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >+</button>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Model Connection Settings */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3.5 space-y-2.5">
+            <div
+              className="flex cursor-pointer items-center justify-between text-xs font-semibold text-slate-200"
+              onClick={() => setShowModelConfig(!showModelConfig)}
+            >
+              <div className="flex items-center gap-1.5 text-amber-400">
+                <Cpu className="h-3.5 w-3.5" />
+                <span>نموذج الذكاء الاصطناعي:</span>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                {modelProvider === 'builtin' ? 'المولد المدمج (أوفلاين)' : modelProvider === 'gemini' ? 'Google Gemini' : 'Ollama محلي'} {showModelConfig ? '▴' : '▾'}
+              </span>
+            </div>
+
+            {showModelConfig && (
+              <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                <select
+                  value={modelProvider}
+                  onChange={e => setModelProvider(e.target.value as any)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs text-slate-200 outline-none"
+                >
+                  <option value="builtin">المولد المدمج الموثق (100% أوفلاين • موصى به)</option>
+                  <option value="gemini">Google Gemini API (سريع وبسيط)</option>
+                  <option value="ollama">نموذج محلي Ollama (localhost:11434)</option>
+                </select>
+
+                {modelProvider === 'gemini' && (
+                  <div>
+                    <label className="mb-1 block text-[11px] text-slate-400">مفتاح Google Gemini API (اختياري):</label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={e => setApiKey(e.target.value)}
+                        placeholder="AIzaSy..."
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200 outline-none"
+                      />
+                      <Key className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 5. Duration Slider */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3.5">
             <div className="flex items-center justify-between text-xs">
               <span className="font-semibold text-slate-200">المدة المستهدفة للإلقاء:</span>
@@ -149,95 +309,9 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
               className="mt-2 w-full accent-amber-500"
             />
             <div className="mt-1 flex justify-between text-[11px] text-slate-400">
-              <span>5 دقائق (موجزة)</span>
+              <span>5 د (موجزة)</span>
               <span>المتوقع: ~{duration * 95} كلمة</span>
-              <span>40 دقيقة (مطولة)</span>
-            </div>
-          </div>
-
-          {/* 4. Audience Profile */}
-          <div>
-            <label className="mb-1.5 block font-semibold text-slate-200">طبيعة المصلين والمخاطبين:</label>
-            <select
-              value={audience}
-              onChange={e => setAudience(e.target.value)}
-              className="w-full rounded-xl border border-slate-700/80 bg-slate-900 p-2.5 font-amiri text-sm text-slate-200 outline-none focus:border-amber-500/80"
-            >
-              <option value="جمهور عام متنوع من المصلين والأسر">جمهور عام متنوع من المصلين والأسر</option>
-              <option value="شباب وطلاب جامعيون">شباب وطلاب جامعيون (تركيز على الفكر والسلوك)</option>
-              <option value="أسر وعائلات (تركيز على التربية والبيوت)">أسر وعائلات (تركيز على التربية والبيوت)</option>
-              <option value="تجمع عمالي وتجاري (تركيز على الأمانة والمعاملات)">تجمع عمالي وتجاري (تركيز على المعاملات)</option>
-            </select>
-          </div>
-
-          {/* 5. Tone */}
-          <div>
-            <label className="mb-1.5 block font-semibold text-slate-200">نبرة الخطبة وأسلوبها:</label>
-            <select
-              value={tone}
-              onChange={e => setTone(e.target.value)}
-              className="w-full rounded-xl border border-slate-700/80 bg-slate-900 p-2.5 font-amiri text-sm text-slate-200 outline-none focus:border-amber-500/80"
-            >
-              <option value="موعظة ترقق القلوب وتجمع بين الرجاء والرهبة">موعظة ترقق القلوب وتجمع بين الرجاء والرهبة</option>
-              <option value="أسلوب علمي تأصيلي رصين ومستند للأدلة">أسلوب علمي تأصيلي رصين ومستند للأدلة</option>
-              <option value="خطابي حماسي يدعو للمبادرة والعمل">خطابي حماسي يدعو للمبادرة والعمل</option>
-              <option value="توجيهي تربوي هادئ يركز على التطبيق العملي">توجيهي تربوي هادئ يركز على التطبيق العملي</option>
-            </select>
-          </div>
-
-          {/* 6. Citation Counters */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3.5 space-y-3">
-            <span className="block font-semibold text-slate-200">توزيع الشواهد الشرعية الموثقة:</span>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">الآيات القرآنية (رسم عثماني):</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setQuranCount(Math.max(1, quranCount - 1))}
-                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >-</button>
-                <span className="w-5 text-center font-bold text-amber-300">{quranCount}</span>
-                <button
-                  type="button"
-                  onClick={() => setQuranCount(Math.min(5, quranCount + 1))}
-                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >+</button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">الأحاديث النبوية (صحيح وحسن):</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setHadithCount(Math.max(1, hadithCount - 1))}
-                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >-</button>
-                <span className="w-5 text-center font-bold text-emerald-300">{hadithCount}</span>
-                <button
-                  type="button"
-                  onClick={() => setHadithCount(Math.min(5, hadithCount + 1))}
-                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >+</button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">الشواهد الشعرية (بحور الخليل):</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPoetryCount(Math.max(0, poetryCount - 1))}
-                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >-</button>
-                <span className="w-5 text-center font-bold text-sky-300">{poetryCount}</span>
-                <button
-                  type="button"
-                  onClick={() => setPoetryCount(Math.min(3, poetryCount + 1))}
-                  className="h-6 w-6 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >+</button>
-              </div>
+              <span>40 د (مطولة)</span>
             </div>
           </div>
 
@@ -249,7 +323,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({ onGenerate, isLoad
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 py-3 font-amiri text-base font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:brightness-110 disabled:opacity-50"
             >
               <Sparkles className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>{isLoading ? 'جارٍ التدقيق والتأصيل الشرعي...' : 'صياغة الخطبة الموثقة'}</span>
+              <span>{isLoading ? 'جارٍ التدقيق والتأصيل الشرعي...' : 'صياغة الخطبة بالذكاء الاصطناعي'}</span>
             </button>
           </div>
         </form>

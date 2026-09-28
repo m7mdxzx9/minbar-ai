@@ -101,7 +101,8 @@ class KhutbahStructurer:
                 "quran": request_data.get("quran_count", 2),
                 "hadith": request_data.get("hadith_count", 2),
                 "poetry": request_data.get("poetry_count", 1)
-            }
+            },
+            "selected_citation_ids": request_data.get("selected_citation_ids") or []
         }
         return blueprint
 
@@ -120,22 +121,84 @@ class VerifiedCitationRetrieverAgent:
     def fetch_citations_for_blueprint(self, blueprint: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
         theme = blueprint.get("theme", "")
         reqs = blueprint.get("citation_requirements", {"quran": 2, "hadith": 2, "poetry": 1})
+        target_quran = reqs.get("quran", 2)
+        target_hadith = reqs.get("hadith", 2)
+        target_poetry = reqs.get("poetry", 1)
+        selected_ids = set(str(sid) for sid in (blueprint.get("selected_citation_ids") or []))
 
-        quran_citations = self.retriever.search_quran(theme, limit=reqs.get("quran", 2))
-        hadith_citations = self.retriever.search_hadith(theme, limit=reqs.get("hadith", 2))
-        poetry_citations = self.retriever.search_poetry(theme, limit=reqs.get("poetry", 1))
+        # 1. Match selected Quran citations first
+        chosen_quran = []
+        if selected_ids:
+            for q in self.retriever.quran_data:
+                id_key = f"q_{q.get('surah_number')}_{q.get('ayah_number')}"
+                if id_key in selected_ids or str(q.get("id")) in selected_ids or q.get("canonical_hash") in selected_ids:
+                    item = dict(q)
+                    item["retrieval_method"] = "User Curated Selection"
+                    item["verified_authenticity"] = True
+                    chosen_quran.append(item)
 
-        # Enforce theological grading filter on hadiths
-        verified_hadiths = []
-        for h in hadith_citations:
-            is_valid, _ = TheologicalPostGenerationValidator.validate_takhrij_grading(h)
-            if is_valid:
-                verified_hadiths.append(h)
+        # 2. Match selected Hadith citations
+        chosen_hadith = []
+        if selected_ids:
+            for h in self.retriever.hadith_data:
+                id_key = f"h_{h.get('hadith_number')}"
+                if id_key in selected_ids or str(h.get("id")) in selected_ids or str(h.get("hadith_number")) in selected_ids or h.get("canonical_hash") in selected_ids:
+                    is_valid, _ = TheologicalPostGenerationValidator.validate_takhrij_grading(h)
+                    if is_valid:
+                        item = dict(h)
+                        item["retrieval_method"] = "User Curated Selection"
+                        item["verified_authenticity"] = True
+                        chosen_hadith.append(item)
+
+        # 3. Match selected Poetry citations
+        chosen_poetry = []
+        if selected_ids and target_poetry > 0:
+            for p in self.retriever.poetry_data:
+                id_key = f"p_{p.get('canonical_hash')}"
+                if id_key in selected_ids or str(p.get("id")) in selected_ids or p.get("canonical_hash") in selected_ids:
+                    item = dict(p)
+                    item["retrieval_method"] = "User Curated Selection"
+                    item["verified_authenticity"] = True
+                    chosen_poetry.append(item)
+
+        # 4. Fill remaining Quran citations via hybrid search
+        needed_quran = max(0, target_quran - len(chosen_quran))
+        if needed_quran > 0:
+            q_results = self.retriever.search_quran(theme, limit=needed_quran + len(chosen_quran) + 2)
+            for qr in q_results:
+                if len(chosen_quran) >= target_quran:
+                    break
+                if not any(cq.get("canonical_hash") == qr.get("canonical_hash") for cq in chosen_quran):
+                    chosen_quran.append(qr)
+
+        # 5. Fill remaining Hadith citations via hybrid search
+        needed_hadith = max(0, target_hadith - len(chosen_hadith))
+        if needed_hadith > 0:
+            h_results = self.retriever.search_hadith(theme, limit=needed_hadith + len(chosen_hadith) + 4)
+            for hr in h_results:
+                if len(chosen_hadith) >= target_hadith:
+                    break
+                is_valid, _ = TheologicalPostGenerationValidator.validate_takhrij_grading(hr)
+                if is_valid and not any(ch.get("canonical_hash") == hr.get("canonical_hash") for ch in chosen_hadith):
+                    chosen_hadith.append(hr)
+
+        # 6. Fill remaining Poetry citations if target_poetry > 0
+        if target_poetry > 0:
+            needed_poetry = max(0, target_poetry - len(chosen_poetry))
+            if needed_poetry > 0:
+                p_results = self.retriever.search_poetry(theme, limit=needed_poetry + len(chosen_poetry) + 2)
+                for pr in p_results:
+                    if len(chosen_poetry) >= target_poetry:
+                        break
+                    if not any(cp.get("canonical_hash") == pr.get("canonical_hash") for cp in chosen_poetry):
+                        chosen_poetry.append(pr)
+        else:
+            chosen_poetry = []
 
         return {
-            "quran": quran_citations,
-            "hadith": verified_hadiths,
-            "poetry": poetry_citations
+            "quran": chosen_quran[:target_quran],
+            "hadith": chosen_hadith[:target_hadith],
+            "poetry": chosen_poetry[:target_poetry]
         }
 
 
@@ -207,15 +270,15 @@ class RhetoricalSynthesizer:
             "citation_source_type": None
         })
 
-        # 3. Quran Citation Block
-        quran_item = quran_list[0] if quran_list else None
-        if quran_item:
+        # 3. Quran Citation Blocks (All citations requested by user)
+        for idx, quran_item in enumerate(quran_list):
+            num_suffix = f" ({idx + 1})" if len(quran_list) > 1 else ""
             blocks.append({
                 "id": str(uuid.uuid4()),
                 "sermon_id": sermon_id,
-                "order_index": 3,
+                "order_index": len(blocks) + 1,
                 "block_type": BlockType.QURAN_CITATION.value,
-                "title_ar": f"التأصيل القرآني: سورة {quran_item.get('surah_name_ar')} [الآية: {quran_item.get('ayah_number')}]",
+                "title_ar": f"التأصيل القرآني{num_suffix}: سورة {quran_item.get('surah_name_ar')} [الآية: {quran_item.get('ayah_number')}]",
                 "content_ar": f"يَقُولُ اللَّهُ تَبَارَكَ وَتَعَالَى فِي مُحْكَمِ التَّنْزِيلِ:\n\n«{quran_item.get('text_uthmani')}»",
                 "verified": True,
                 "verification_score": 1.0,
@@ -229,16 +292,35 @@ class RhetoricalSynthesizer:
                 }
             })
 
-        # 4. Hadith Citation Block
-        hadith_item = hadith_list[0] if hadith_list else None
-        if hadith_item:
+        # 4. Thematic Exposition 2 (Connecting Quran with Sunnah & practical application)
+        exposition_2 = (
+            "فَانْظُرُوا رَعَاكُمُ اللَّهُ كَيْفَ قَرَنَ الْقُرْآنُ الْعَظِيمُ بَيْنَ صِحَّةِ الْعَقِيدَةِ وَحُسْنِ الْعَمَلِ. "
+            "إِنَّ دِينَ الإِسْلَامِ لَيْسَ مُجَرَّدَ كَلِمَاتٍ تُقَالُ عَلَى الأَلْسِنَةِ، وَلَكِنَّهُ مَنْهَجُ حَيَاةٍ يَتَجَلَّى فِي "
+            "صِدْقِ الْمُعَامَلَةِ، وَأَدَاءِ الأَمَانَاتِ، وَبِرِّ الْوَالِدَيْنِ، وَصِلَةِ الأَرْحَامِ، وَكَفِّ الأَذَى عَنِ النَّاسِ. "
+            "وَقَدْ جَاءَتِ السُّنَّةُ النَّبَوِيَّةُ الْمُطَهَّرَةُ بَيَانًا لِهَذَا الْهُدَى وَتَطْبِيقًا عَمَلِيًّا لِمَقَاصِدِ الشَّرِيعَةِ."
+        )
+        blocks.append({
+            "id": str(uuid.uuid4()),
+            "sermon_id": sermon_id,
+            "order_index": len(blocks) + 1,
+            "block_type": BlockType.THEMATIC_EXPOSITION.value,
+            "title_ar": "البيان النبوي والتطبيق العملي",
+            "content_ar": exposition_2,
+            "verified": True,
+            "verification_score": 1.0,
+            "citation_source_type": None
+        })
+
+        # 5. Hadith Citation Blocks (All citations requested by user)
+        for idx, hadith_item in enumerate(hadith_list):
+            num_suffix = f" ({idx + 1})" if len(hadith_list) > 1 else ""
             narrator = hadith_item.get('narrator_companion', 'عن النبي ﷺ')
             blocks.append({
                 "id": str(uuid.uuid4()),
                 "sermon_id": sermon_id,
-                "order_index": 4,
+                "order_index": len(blocks) + 1,
                 "block_type": BlockType.HADITH_CITATION.value,
-                "title_ar": f"البرهان النبوي: {hadith_item.get('collection')} (#{hadith_item.get('hadith_number')})",
+                "title_ar": f"البرهان النبوي{num_suffix}: {hadith_item.get('collection')} (#{hadith_item.get('hadith_number')})",
                 "content_ar": (
                     f"وَفِي صَحِيحِ السُّنَّةِ الْمُطَهَّرَةِ، عَنْ {narrator}، عَنْ رَسُولِ اللَّهِ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ أَنَّهُ قَالَ:\n\n"
                     f"«{hadith_item.get('matn_ar')}»"
@@ -258,34 +340,15 @@ class RhetoricalSynthesizer:
                 }
             })
 
-        # 5. Thematic Exposition 2 (Practical Application)
-        exposition_2 = (
-            "فَانْظُرُوا رَعَاكُمُ اللَّهُ كَيْفَ قَرَنَ النَّبِيُّ ﷺ بَيْنَ صِحَّةِ الْعَقِيدَةِ وَحُسْنِ الْعَمَلِ. "
-            "إِنَّ دِينَ الإِسْلَامِ لَيْسَ مُجَرَّدَ كَلِمَاتٍ تُقَالُ عَلَى الأَلْسِنَةِ، وَلَكِنَّهُ مَنْهَجُ حَيَاةٍ يَتَجَلَّى فِي "
-            "صِدْقِ الْمُعَامَلَةِ، وَأَدَاءِ الأَمَانَاتِ، وَبِرِّ الْوَالِدَيْنِ، وَصِلَةِ الأَرْحَامِ، وَكَفِّ الأَذَى عَنِ النَّاسِ. "
-            "فَطُوبَى لِمَنْ سَمِعَ وَعَى، وَاسْتَجَابَ لِأَمْرِ رَبِّهِ وَاهْتَدَى."
-        )
-        blocks.append({
-            "id": str(uuid.uuid4()),
-            "sermon_id": sermon_id,
-            "order_index": 5,
-            "block_type": BlockType.THEMATIC_EXPOSITION.value,
-            "title_ar": "التطبيق العملي وتزكية النفوس",
-            "content_ar": exposition_2,
-            "verified": True,
-            "verification_score": 1.0,
-            "citation_source_type": None
-        })
-
-        # 6. Poetry Citation Block
-        poetry_item = poetry_list[0] if poetry_list else None
-        if poetry_item:
+        # 6. Poetry Citation Blocks (All citations requested by user)
+        for idx, poetry_item in enumerate(poetry_list):
+            num_suffix = f" ({idx + 1})" if len(poetry_list) > 1 else ""
             blocks.append({
                 "id": str(uuid.uuid4()),
                 "sermon_id": sermon_id,
-                "order_index": 6,
+                "order_index": len(blocks) + 1,
                 "block_type": BlockType.POETRY_CITATION.value,
-                "title_ar": f"حكمة الشعر: {poetry_item.get('poet_name_ar')} ({poetry_item.get('bahr')})",
+                "title_ar": f"شاهد البلاغة والحكمة{num_suffix}: {poetry_item.get('poet_name_ar')} ({poetry_item.get('bahr')})",
                 "content_ar": f"وَلِلَّهِ دَرُّ الْقَائِلِ فِيمَا جَرَى بِهِ مَجْرَى الْحِكْمَةِ وَالْمَوْعِظَةِ:\n\n{poetry_item.get('bayt_ar')}",
                 "verified": True,
                 "verification_score": 1.0,
@@ -307,7 +370,7 @@ class RhetoricalSynthesizer:
         blocks.append({
             "id": str(uuid.uuid4()),
             "sermon_id": sermon_id,
-            "order_index": 7,
+            "order_index": len(blocks) + 1,
             "block_type": BlockType.ISTIGHFAR_PAUSE.value,
             "title_ar": "جلسة الاستغفار بين الخطبتين",
             "content_ar": istighfar_content,
@@ -328,7 +391,7 @@ class RhetoricalSynthesizer:
         blocks.append({
             "id": str(uuid.uuid4()),
             "sermon_id": sermon_id,
-            "order_index": 8,
+            "order_index": len(blocks) + 1,
             "block_type": BlockType.SECOND_KHUTBAH.value,
             "title_ar": "الخطبة الثانية: التحذير والوصية الجامعة",
             "content_ar": second_khutbah_content,
@@ -351,7 +414,7 @@ class RhetoricalSynthesizer:
         blocks.append({
             "id": str(uuid.uuid4()),
             "sermon_id": sermon_id,
-            "order_index": 9,
+            "order_index": len(blocks) + 1,
             "block_type": BlockType.CLOSING_DUA.value,
             "title_ar": "الدعاء المأثور وصلاح الأمة",
             "content_ar": dua_content,
@@ -359,6 +422,10 @@ class RhetoricalSynthesizer:
             "verification_score": 1.0,
             "citation_source_type": None
         })
+
+        # Re-index all blocks systematically
+        for idx, blk in enumerate(blocks):
+            blk["order_index"] = idx + 1
 
         return blocks
 
