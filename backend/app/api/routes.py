@@ -239,6 +239,31 @@ def test_api_key(req: Dict[str, Any]):
                     return {"valid": False, "message": f"فشل التحقق ({res.status_code}): {err}"}
         except Exception as e:
             return {"valid": False, "message": f"تعذر الاتصال بخدمة Gemini: {str(e)}"}
+    elif provider == "grok" or api_key.startswith("xai-"):
+        if not api_key:
+            return {"valid": False, "message": "يرجى إدخال مفتاح Grok API أولاً"}
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        grok_model = model if model and "grok" in model else "grok-beta"
+        payload = {
+            "model": grok_model,
+            "messages": [{"role": "user", "content": "مرحبا"}],
+            "max_tokens": 5
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    return {"valid": True, "message": "تم التحقق من المفتاح بنجاح! الاتصال بـ Grok (xAI) يعمل بكفاءة عالية."}
+                else:
+                    err_data = res.json()
+                    err_msg = err_data.get("error", {}).get("message") or res.text
+                    return {"valid": False, "message": f"فشل التحقق من Grok ({res.status_code}): {err_msg}"}
+        except Exception as e:
+            return {"valid": False, "message": f"تعذر الاتصال بـ Grok API: {str(e)}"}
     elif provider == "ollama":
         ollama_url = req.get("ollama_url", "http://localhost:11434/api/tags")
         try:

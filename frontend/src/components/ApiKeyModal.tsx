@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Cpu,
   Sparkles,
+  Zap,
   Eye,
   EyeOff,
   RefreshCw,
@@ -28,18 +29,29 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   onClose,
   onKeySaved
 }) => {
-  const [provider, setProvider] = useState<'gemini' | 'builtin' | 'ollama'>('gemini');
+  const [provider, setProvider] = useState<'grok' | 'gemini' | 'builtin' | 'ollama'>('grok');
   const [apiKey, setApiKey] = useState<string>('');
-  const [modelName, setModelName] = useState<string>('gemini-1.5-flash');
+  const [modelName, setModelName] = useState<string>('grok-beta');
   const [showKey, setShowKey] = useState<boolean>(false);
   const [isTesting, setIsTesting] = useState<boolean>(false);
+  const [detectedProvider, setDetectedProvider] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ valid: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedKey = localStorage.getItem('minbar_api_key') || '';
-      const savedProvider = (localStorage.getItem('minbar_model_provider') as any) || 'gemini';
-      const savedModel = localStorage.getItem('minbar_model_name') || 'gemini-1.5-flash';
+      let savedProvider = (localStorage.getItem('minbar_model_provider') as any) || 'grok';
+      let savedModel = localStorage.getItem('minbar_model_name') || 'grok-beta';
+
+      // Auto-detect based on saved key format
+      if (savedKey.startsWith('xai-')) {
+        savedProvider = 'grok';
+        if (!savedModel.includes('grok')) savedModel = 'grok-beta';
+      } else if (savedKey.startsWith('AIzaSy')) {
+        savedProvider = 'gemini';
+        if (!savedModel.includes('gemini')) savedModel = 'gemini-1.5-flash';
+      }
+
       setApiKey(savedKey);
       setProvider(savedProvider);
       setModelName(savedModel);
@@ -48,8 +60,41 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleKeyChange = (val: string) => {
+    setApiKey(val);
+    setTestResult(null);
+    const trimmed = val.trim();
+    if (trimmed.startsWith('xai-')) {
+      setProvider('grok');
+      setDetectedProvider('Grok (xAI)');
+      if (!modelName.includes('grok')) {
+        setModelName('grok-beta');
+      }
+    } else if (trimmed.startsWith('AIzaSy')) {
+      setProvider('gemini');
+      setDetectedProvider('Google Gemini');
+      if (!modelName.includes('gemini')) {
+        setModelName('gemini-1.5-flash');
+      }
+    } else {
+      setDetectedProvider(null);
+    }
+  };
+
+  const handleProviderSelect = (newProv: 'grok' | 'gemini' | 'builtin' | 'ollama') => {
+    setProvider(newProv);
+    setTestResult(null);
+    if (newProv === 'grok') {
+      setModelName('grok-beta');
+    } else if (newProv === 'gemini') {
+      setModelName('gemini-1.5-flash');
+    } else if (newProv === 'ollama') {
+      setModelName('llama3.2');
+    }
+  };
+
   const handleTestConnection = async () => {
-    if (provider === 'gemini' && !apiKey.trim()) {
+    if ((provider === 'grok' || provider === 'gemini') && !apiKey.trim()) {
       setTestResult({ valid: false, message: 'يرجى إدخال مفتاح API أولاً قبل الفحص.' });
       return;
     }
@@ -79,10 +124,12 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     if (typeof window !== 'undefined') {
       localStorage.removeItem('minbar_api_key');
       localStorage.setItem('minbar_model_provider', 'builtin');
+      localStorage.removeItem('minbar_model_name');
     }
     setApiKey('');
     setProvider('builtin');
     setTestResult(null);
+    setDetectedProvider(null);
     onKeySaved('builtin', '', 'builtin');
   };
 
@@ -103,7 +150,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 إعداد مفتاح الذكاء الاصطناعي (AI API Key)
               </h2>
               <p className="text-xs text-slate-400">
-                استخدم نماذج Gemini الفائقة لصياغة خطب بليغة ومبتكرة مع التحقق الشرعي الصارم
+                دعم كامل لـ Grok (xAI) و Google Gemini مع حماية شرعية صارمة من الهلوسة
               </p>
             </div>
           </div>
@@ -122,39 +169,57 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <label className="mb-1.5 block font-semibold text-slate-300">
               مزود نموذج الذكاء الاصطناعي:
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {/* Grok button */}
               <button
                 type="button"
-                onClick={() => setProvider('gemini')}
-                className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${
+                onClick={() => handleProviderSelect('grok')}
+                className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition ${
+                  provider === 'grok'
+                    ? 'border-cyan-500 bg-cyan-500/10 text-cyan-200 shadow-sm ring-1 ring-cyan-500/50'
+                    : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <Zap className="mb-1 h-4 w-4 text-cyan-400" />
+                <span className="font-bold">Grok (xAI)</span>
+                <span className="text-[10px] text-cyan-400/90 font-mono">xai-...</span>
+              </button>
+
+              {/* Gemini button */}
+              <button
+                type="button"
+                onClick={() => handleProviderSelect('gemini')}
+                className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition ${
                   provider === 'gemini'
-                    ? 'border-amber-500 bg-amber-500/10 text-amber-200 shadow-sm'
+                    ? 'border-amber-500 bg-amber-500/10 text-amber-200 shadow-sm ring-1 ring-amber-500/50'
                     : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
                 }`}
               >
                 <Sparkles className="mb-1 h-4 w-4 text-amber-400" />
                 <span className="font-bold">Google Gemini</span>
-                <span className="text-[10px] text-amber-400/80">موصى به • مجاني وسريع</span>
+                <span className="text-[10px] text-amber-400/80">مجاني وسريع</span>
               </button>
 
+              {/* Builtin button */}
               <button
                 type="button"
-                onClick={() => setProvider('builtin')}
-                className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${
+                onClick={() => handleProviderSelect('builtin')}
+                className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition ${
                   provider === 'builtin'
-                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200 shadow-sm'
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200 shadow-sm ring-1 ring-emerald-500/50'
                     : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
                 }`}
               >
                 <ShieldCheck className="mb-1 h-4 w-4 text-emerald-400" />
                 <span className="font-bold">المحرك المدمج</span>
-                <span className="text-[10px] text-emerald-400/80">100% أوفلاين محلي</span>
+                <span className="text-[10px] text-emerald-400/80">100% أوفلاين</span>
               </button>
 
+              {/* Ollama button */}
               <button
                 type="button"
-                onClick={() => setProvider('ollama')}
-                className={`flex flex-col items-center justify-center rounded-xl border p-3 text-center transition ${
+                onClick={() => handleProviderSelect('ollama')}
+                className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition ${
                   provider === 'ollama'
                     ? 'border-sky-500 bg-sky-500/10 text-sky-200 shadow-sm'
                     : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700'
@@ -162,10 +227,100 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               >
                 <Cpu className="mb-1 h-4 w-4 text-sky-400" />
                 <span className="font-bold">خادم Ollama</span>
-                <span className="text-[10px] text-sky-400/80">نموذج محلي خاص</span>
+                <span className="text-[10px] text-sky-400/80">نموذج محلي</span>
               </button>
             </div>
           </div>
+
+          {/* Auto Detection Badge */}
+          {detectedProvider && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-950/30 px-3 py-1.5 text-xs text-cyan-300">
+              <Zap className="h-3.5 w-3.5 text-cyan-400" />
+              <span>تم التعرف التلقائي على مفتاح <strong>{detectedProvider}</strong> وتفعيله مباشرة!</span>
+            </div>
+          )}
+
+          {/* Grok (xAI) Settings */}
+          {provider === 'grok' && (
+            <div className="space-y-3 rounded-xl border border-cyan-800/60 bg-slate-900/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-cyan-200">أدخل مفتاح Grok (xAI) API:</span>
+                <a
+                  href="https://console.x.ai/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 underline"
+                >
+                  <span>إدارة المفتاح من xAI Console</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={e => handleKeyChange(e.target.value)}
+                  placeholder="xai-..."
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 pl-10 pr-3 font-mono text-xs text-cyan-100 placeholder-slate-600 outline-none focus:border-cyan-500/80"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-200"
+                >
+                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {/* Model Choice */}
+              <div>
+                <label className="mb-1 block font-semibold text-slate-300">
+                  إصدار نموذج Grok المفضل:
+                </label>
+                <select
+                  value={modelName}
+                  onChange={e => setModelName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200 outline-none focus:border-cyan-500/80"
+                >
+                  <option value="grok-beta">Grok Beta (فائق السرعة والذكاء • موصى به)</option>
+                  <option value="grok-2-latest">Grok 2 Latest (الجيل الأحدث والأقوى بلاغة)</option>
+                  <option value="grok-2-1212">Grok 2.1212 (إصدار متقدم مستقر)</option>
+                  <option value="grok-vision-beta">Grok Vision Beta</option>
+                </select>
+              </div>
+
+              {/* Test Button & Result */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={isTesting || !apiKey.trim()}
+                  className="flex items-center gap-2 rounded-lg border border-cyan-700/60 bg-cyan-950/40 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-900/60 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isTesting ? 'animate-spin text-cyan-400' : ''}`} />
+                  <span>{isTesting ? 'جارٍ فحص المفتاح مع xAI Grok...' : 'اختبار صلاحية مفتاح Grok والاتصال'}</span>
+                </button>
+
+                {testResult && (
+                  <div
+                    className={`mt-2 flex items-center gap-2 rounded-lg p-2.5 text-xs ${
+                      testResult.valid
+                        ? 'border border-emerald-600/40 bg-emerald-950/40 text-emerald-300'
+                        : 'border border-red-600/40 bg-red-950/40 text-red-300'
+                    }`}
+                  >
+                    {testResult.valid ? (
+                      <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+                    )}
+                    <span>{testResult.message}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Gemini Settings */}
           {provider === 'gemini' && (
@@ -187,10 +342,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 <input
                   type={showKey ? 'text' : 'password'}
                   value={apiKey}
-                  onChange={e => {
-                    setApiKey(e.target.value);
-                    setTestResult(null);
-                  }}
+                  onChange={e => handleKeyChange(e.target.value)}
                   placeholder="AIzaSy..."
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 pl-10 pr-3 font-mono text-xs text-amber-100 placeholder-slate-600 outline-none focus:border-amber-500/80"
                 />
@@ -290,41 +442,38 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           <div className="rounded-xl border border-amber-900/30 bg-amber-950/20 p-3 text-[11px] text-amber-300/90 flex items-start gap-2">
             <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
             <span>
-              <strong>حماية عقدية صارمة:</strong> حتى عند تفعيل نماذج الذكاء الاصطناعي الخارجية، يقوم النظام
-              تلقائياً بحظر أي هلوسة دينية وإلزام النموذج بالشواهد المسترجعة نصاً دون أدنى تحريف.
+              <strong>حماية عقدية صارمة (Zero-Hallucination):</strong> سواء استخدمت Grok أو Gemini، يقوم
+              محرك «منبر» بالتحقق الدقيق من الشواهد والآيات والأحاديث ومنع أي تزييف أو تلفيق بشكل صارم.
             </span>
           </div>
         </div>
 
         {/* Footer Actions */}
         <div className="mt-6 flex items-center justify-between border-t border-slate-800 pt-4">
-          {apiKey ? (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>مسح المفتاح والعودة للمحلي</span>
-            </button>
-          ) : (
-            <div />
-          )}
+          <button
+            type="button"
+            onClick={handleClear}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-950/30 hover:text-red-300 transition"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>مسح المفتاح والعودة للمدمج</span>
+          </button>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition"
+              className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition"
             >
               إلغاء
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="rounded-xl bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 px-5 py-2 font-amiri text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:brightness-110 transition"
+              className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 px-5 py-2 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/20 hover:brightness-110 transition"
             >
-              حفظ وتفعيل
+              <CheckCircle className="h-4 w-4" />
+              <span>حفظ الإعدادات</span>
             </button>
           </div>
         </div>

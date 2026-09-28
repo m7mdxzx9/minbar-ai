@@ -109,6 +109,40 @@ class LLMAdapter:
                 # Log and fallback gracefully to deterministic engine
                 print(f"[LLMAdapter] Gemini call failed: {e}. Falling back to built-in verified engine.")
 
+        elif (model_provider == "grok" or (key and key.startswith("xai-"))) and key:
+            try:
+                model_name = custom_model if custom_model and "grok" in custom_model else "grok-beta"
+                url = "https://api.x.ai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": f"{SYSTEM_PROMPT_KHUTBAH}\nأخرج النتيجة بصيغة JSON فقط."},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.4
+                }
+                with httpx.Client(timeout=45.0) as client:
+                    resp = client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        raw_text = data["choices"][0]["message"]["content"].strip()
+                        if raw_text.startswith("```"):
+                            raw_text = raw_text.split("\n", 1)[1]
+                            if raw_text.endswith("```"):
+                                raw_text = raw_text.rsplit("\n", 1)[0]
+                            raw_text = raw_text.strip()
+                        parsed = json.loads(raw_text)
+                        if isinstance(parsed, list):
+                            return {"blocks": parsed}
+                        if isinstance(parsed, dict) and "blocks" in parsed:
+                            return parsed
+            except Exception as e:
+                print(f"[LLMAdapter] Grok call failed: {e}. Falling back to built-in verified engine.")
+
         elif model_provider == "ollama":
             try:
                 ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
@@ -186,6 +220,48 @@ class LLMAdapter:
                             return res_text
             except Exception as e:
                 print(f"[LLMAdapter] Refinement call failed: {e}. Using deterministic fallback.")
+
+        elif (model_provider == "grok" or (key and key.startswith("xai-"))) and key:
+            try:
+                instruction_text = custom_instruction or ""
+                if action == "rephrase":
+                    instruction_text += " أعد صياغة هذا المقطع بأفصح عبارة وأرقى أسلوب بياني عربي رصين."
+                elif action == "elaborate":
+                    instruction_text += " قم ببسط وشرح هذا المعنى وتوسيعه وتدعيمه بالأمثلة التوجيهية المؤثرة."
+                elif action == "shorten":
+                    instruction_text += " قم بإيجاز وتلخيص هذا المقطع وحذف الحشو مع الحفاظ التام على جوهر المعنى."
+                elif action == "make_solemn":
+                    instruction_text += " أضف إلى المقطع نبرة وعظية مؤثرة ترقق القلوب وتذكر بالآخرة ومراقبة الله."
+
+                prompt = f"""{SYSTEM_PROMPT_REFINE}
+
+الفقرة الأصلية:
+{current_text}
+
+التوجيه المطلوب:
+{instruction_text}
+
+المطلوب: أخرج فقط النص المعدل مباشرة دون مقدمات أو تعليقات."""
+
+                url = "https://api.x.ai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": "grok-beta",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.4
+                }
+                with httpx.Client(timeout=25.0) as client:
+                    resp = client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        res_text = data["choices"][0]["message"]["content"].strip()
+                        if res_text:
+                            return res_text
+            except Exception as e:
+                print(f"[LLMAdapter] Grok refine call failed: {e}. Using deterministic fallback.")
 
         # Deterministic refinement fallback
         if action == "make_solemn":

@@ -58,7 +58,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({
   const [tone, setTone] = useState('موعظة ترقق القلوب وتجمع بين الرجاء والرهبة');
   
   // Model settings
-  const [modelProvider, setModelProvider] = useState<'builtin' | 'gemini' | 'ollama'>('builtin');
+  const [modelProvider, setModelProvider] = useState<'builtin' | 'gemini' | 'grok' | 'ollama'>('grok');
   const [apiKey, setApiKey] = useState('');
   const [showModelConfig, setShowModelConfig] = useState(false);
 
@@ -258,7 +258,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({
                 <span>نموذج الذكاء الاصطناعي:</span>
               </div>
               <span className="text-[11px] text-slate-400">
-                {modelProvider === 'builtin' ? 'المولد المدمج (أوفلاين)' : modelProvider === 'gemini' ? 'Google Gemini' : 'Ollama محلي'} {showModelConfig ? '▴' : '▾'}
+                {modelProvider === 'builtin' ? 'المولد المدمج (أوفلاين)' : modelProvider === 'grok' ? 'Grok (xAI)' : modelProvider === 'gemini' ? 'Google Gemini' : 'Ollama محلي'} {showModelConfig ? '▴' : '▾'}
               </span>
             </div>
 
@@ -269,20 +269,28 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({
                   onChange={e => setModelProvider(e.target.value as any)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs text-slate-200 outline-none"
                 >
-                  <option value="builtin">المولد المدمج الموثق (100% أوفلاين • موصى به)</option>
-                  <option value="gemini">Google Gemini API (سريع وبسيط)</option>
+                  <option value="grok">Grok (xAI) API (موصى به • فائق البلاغة والذكاء)</option>
+                  <option value="gemini">Google Gemini API (سريع ومجاني)</option>
+                  <option value="builtin">المولد المدمج الموثق (100% أوفلاين)</option>
                   <option value="ollama">نموذج محلي Ollama (localhost:11434)</option>
                 </select>
 
-                {modelProvider === 'gemini' && (
+                {(modelProvider === 'grok' || modelProvider === 'gemini') && (
                   <div>
-                    <label className="mb-1 block text-[11px] text-slate-400">مفتاح Google Gemini API (اختياري):</label>
+                    <label className="mb-1 block text-[11px] text-slate-400">
+                      {modelProvider === 'grok' ? 'مفتاح Grok API (xai-...):' : 'مفتاح Google Gemini API:'}
+                    </label>
                     <div className="relative">
                       <input
                         type="password"
                         value={apiKey}
-                        onChange={e => setApiKey(e.target.value)}
-                        placeholder="AIzaSy..."
+                        onChange={e => {
+                          const val = e.target.value;
+                          setApiKey(val);
+                          if (val.trim().startsWith('xai-')) setModelProvider('grok');
+                          else if (val.trim().startsWith('AIzaSy')) setModelProvider('gemini');
+                        }}
+                        placeholder={modelProvider === 'grok' ? 'xai-...' : 'AIzaSy...'}
                         className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200 outline-none"
                       />
                       <Key className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />

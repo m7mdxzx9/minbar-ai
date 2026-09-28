@@ -142,7 +142,7 @@ export interface KhutbahGenerationParams {
   quran_count: number;
   hadith_count: number;
   poetry_count: number;
-  model_provider?: 'builtin' | 'gemini' | 'ollama';
+  model_provider?: 'builtin' | 'gemini' | 'grok' | 'ollama';
   api_key?: string;
   custom_model_name?: string;
   selected_citation_ids?: string[];
