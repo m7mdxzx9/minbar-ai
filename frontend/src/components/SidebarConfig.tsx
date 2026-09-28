@@ -58,7 +58,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({
   const [tone, setTone] = useState('موعظة ترقق القلوب وتجمع بين الرجاء والرهبة');
   
   // Model settings
-  const [modelProvider, setModelProvider] = useState<'builtin' | 'gemini' | 'grok' | 'ollama'>('grok');
+  const [modelProvider, setModelProvider] = useState<'builtin' | 'groq' | 'gemini' | 'grok' | 'ollama'>('groq');
   const [apiKey, setApiKey] = useState('');
   const [showModelConfig, setShowModelConfig] = useState(false);
 
@@ -258,7 +258,7 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({
                 <span>نموذج الذكاء الاصطناعي:</span>
               </div>
               <span className="text-[11px] text-slate-400">
-                {modelProvider === 'builtin' ? 'المولد المدمج (أوفلاين)' : modelProvider === 'grok' ? 'Grok (xAI)' : modelProvider === 'gemini' ? 'Google Gemini' : 'Ollama محلي'} {showModelConfig ? '▴' : '▾'}
+                {modelProvider === 'builtin' ? 'المولد المدمج (أوفلاين)' : modelProvider === 'groq' ? 'Groq (سرعة البرق)' : modelProvider === 'grok' ? 'Grok (xAI)' : modelProvider === 'gemini' ? 'Google Gemini' : 'Ollama محلي'} {showModelConfig ? '▴' : '▾'}
               </span>
             </div>
 
@@ -269,16 +269,21 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({
                   onChange={e => setModelProvider(e.target.value as any)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs text-slate-200 outline-none"
                 >
-                  <option value="grok">Grok (xAI) API (موصى به • فائق البلاغة والذكاء)</option>
-                  <option value="gemini">Google Gemini API (سريع ومجاني)</option>
+                  <option value="groq">Groq LPU (gsk_...) - سرعة خارقة • Llama 3.3 70B</option>
+                  <option value="grok">Grok xAI (xai-...) - فائق البلاغة والذكاء</option>
+                  <option value="gemini">Google Gemini API (AIzaSy...)</option>
                   <option value="builtin">المولد المدمج الموثق (100% أوفلاين)</option>
                   <option value="ollama">نموذج محلي Ollama (localhost:11434)</option>
                 </select>
 
-                {(modelProvider === 'grok' || modelProvider === 'gemini') && (
+                {(modelProvider === 'groq' || modelProvider === 'grok' || modelProvider === 'gemini') && (
                   <div>
                     <label className="mb-1 block text-[11px] text-slate-400">
-                      {modelProvider === 'grok' ? 'مفتاح Grok API (xai-...):' : 'مفتاح Google Gemini API:'}
+                      {modelProvider === 'groq'
+                        ? 'مفتاح Groq API (الذي يبدأ بـ gsk_):'
+                        : modelProvider === 'grok'
+                        ? 'مفتاح Grok API (xai-...):'
+                        : 'مفتاح Google Gemini API:'}
                     </label>
                     <div className="relative">
                       <input
@@ -287,10 +292,12 @@ export const SidebarConfig: React.FC<SidebarConfigProps> = ({
                         onChange={e => {
                           const val = e.target.value;
                           setApiKey(val);
-                          if (val.trim().startsWith('xai-')) setModelProvider('grok');
-                          else if (val.trim().startsWith('AIzaSy')) setModelProvider('gemini');
+                          const trimmed = val.trim();
+                          if (trimmed.startsWith('gsk_')) setModelProvider('groq');
+                          else if (trimmed.startsWith('xai-')) setModelProvider('grok');
+                          else if (trimmed.startsWith('AIzaSy')) setModelProvider('gemini');
                         }}
-                        placeholder={modelProvider === 'grok' ? 'xai-...' : 'AIzaSy...'}
+                        placeholder={modelProvider === 'groq' ? 'gsk_...' : modelProvider === 'grok' ? 'xai-...' : 'AIzaSy...'}
                         className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200 outline-none"
                       />
                       <Key className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />

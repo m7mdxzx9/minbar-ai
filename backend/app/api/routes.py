@@ -239,6 +239,31 @@ def test_api_key(req: Dict[str, Any]):
                     return {"valid": False, "message": f"فشل التحقق ({res.status_code}): {err}"}
         except Exception as e:
             return {"valid": False, "message": f"تعذر الاتصال بخدمة Gemini: {str(e)}"}
+    elif provider == "groq" or api_key.startswith("gsk_"):
+        if not api_key:
+            return {"valid": False, "message": "يرجى إدخال مفتاح Groq API أولاً"}
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        groq_model = model if model and ("llama" in model or "mixtral" in model or "gemma" in model) else "llama-3.3-70b-versatile"
+        payload = {
+            "model": groq_model,
+            "messages": [{"role": "user", "content": "مرحبا"}],
+            "max_tokens": 5
+        }
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    return {"valid": True, "message": "تم التحقق من المفتاح بنجاح! الاتصال بـ Groq يعمل بسرعة البرق وبكفاءة عالية."}
+                else:
+                    err_data = res.json()
+                    err_msg = err_data.get("error", {}).get("message") or res.text
+                    return {"valid": False, "message": f"فشل التحقق من Groq ({res.status_code}): {err_msg}"}
+        except Exception as e:
+            return {"valid": False, "message": f"تعذر الاتصال بـ Groq API: {str(e)}"}
     elif provider == "grok" or api_key.startswith("xai-"):
         if not api_key:
             return {"valid": False, "message": "يرجى إدخال مفتاح Grok API أولاً"}

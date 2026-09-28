@@ -137,7 +137,7 @@ class KhutbahGenerationRequest(BaseModel):
     quran_count: int = Field(default=2, ge=1, le=5)
     hadith_count: int = Field(default=2, ge=1, le=5)
     poetry_count: int = Field(default=1, ge=0, le=3)
-    model_provider: Optional[str] = Field(default="builtin", description="'builtin', 'gemini', 'grok', 'ollama'")
+    model_provider: Optional[str] = Field(default="builtin", description="'builtin', 'groq', 'grok', 'gemini', 'ollama'")
     api_key: Optional[str] = None
     custom_model_name: Optional[str] = None
     selected_citation_ids: Optional[List[str]] = None
